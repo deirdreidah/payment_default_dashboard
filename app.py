@@ -89,10 +89,28 @@ st.markdown("""
         padding: 5px 10px;
     }
     
-    /* Hide Developer Menus */
+    /* Standardized Top Padding for a clean layout */
+    .block-container {
+        padding-top: 3rem !important;
+        padding-bottom: 2rem !important;
+    }
+
+    h1 {
+        margin-top: 0 !important;
+        margin-bottom: 0.5rem !important;
+        line-height: 1.2;
+    }
+
+    /* Ensure subtitle has enough space */
+    .stMarkdown {
+        margin-bottom: 1rem;
+    }
+
+    /* Hide Developer Menus and Header Space */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header {display: none !important;}
+    [data-testid="stHeader"] {display: none !important;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -244,7 +262,8 @@ with st.sidebar:
 if "prediction" in st.session_state:
     p = st.session_state.prediction
     prob = p["prob"]
-    color = "red" if prob >= FINAL_THRESHOLD else ("orange" if prob >= 0.3 else "green")
+    # Using a muted gold for High to match the reference image theme
+    color = "orange" if prob >= FINAL_THRESHOLD else ("orange" if prob >= 0.3 else "green")
     risk = "High" if prob >= FINAL_THRESHOLD else ("Medium" if prob >= 0.3 else "Low")
     
     st.success(f"Prediction for {p['name']} completed!")
@@ -274,11 +293,43 @@ if os.path.exists("prediction_log.csv"):
     
     chart_col1, chart_col2 = st.columns(2)
     
-    #bar chart to show the risk level of the clients
+    #pie chart to show the total risk level of the clients
     with chart_col1:
       st.subheader("Risk Distribution")
-      risk_counts = data["Risk Level"].value_counts()
-      st.bar_chart(risk_counts, color="#1e40af")
+      risk_counts = data["Risk Level"].value_counts().reset_index()
+      risk_counts.columns = ["Risk Level", "Count"]
+      
+      # Define specific colors for risks for premium visual consistency
+      color_map = {
+          "Low": "#93c4d1",    
+          "Medium": "#dfa382", 
+          "High": "#e9d080"    
+      }
+      
+      fig_pie = px.pie(
+          risk_counts, 
+          values="Count", 
+          names="Risk Level",
+          color="Risk Level",
+          color_discrete_map=color_map,
+          hole=0.5, 
+      )
+      
+      fig_pie.update_traces(
+          textposition='inside', 
+          textinfo='percent+label',
+          marker=dict(line=dict(color='#ffffff', width=2))
+      )
+      
+      fig_pie.update_layout(
+          showlegend=False,
+          margin=dict(t=30, b=30, l=30, r=30),
+          height=450,
+          paper_bgcolor='rgba(0,0,0,0)',
+          plot_bgcolor='rgba(0,0,0,0)'
+      )
+      
+      st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
     
     #bar chart to show the key features used to predict deafulters and non-defaulters
     with chart_col2:
@@ -293,7 +344,22 @@ if os.path.exists("prediction_log.csv"):
             ]
             imp_df = pd.DataFrame({"Feature": feature_names, "Importance": importance})
             imp_df = imp_df.sort_values("Importance", ascending=False).head(10)
-            st.bar_chart(imp_df.set_index("Feature"), color="#ef4444")
+            
+            fig_bar = px.bar(
+                imp_df,
+                x="Feature",
+                y="Importance",
+                color_discrete_sequence=["#3046b1"]
+            )
+            fig_bar.update_layout(
+                margin=dict(t=30, b=30, l=30, r=30),
+                height=450,
+                xaxis_title=None,
+                yaxis_title=None,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
         except AttributeError:
             st.info("Feature importance data not available for this model type.")
 
@@ -302,7 +368,6 @@ if os.path.exists("prediction_log.csv"):
     # Data Table
     st.subheader("Recent Assessments")
     
-    # Sort and Reorder for Download/Display
     # Handle legacy 'Date' (which might be datetime string) or 'Assessment Date'
     if "Assessment Date" in data.columns:
         data.rename(columns={"Assessment Date": "Date"}, inplace=True)
@@ -330,7 +395,7 @@ if os.path.exists("prediction_log.csv"):
 
     # Download Option
     st.download_button(
-        label="📥 Download Assessment Log (Excel/CSV)",
+        label="📥 Download Assessment Log (Excel)",
         data=data.to_csv(index=False),
         file_name=f"payment_risk_log_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
